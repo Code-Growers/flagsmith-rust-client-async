@@ -2,9 +2,10 @@ use flume;
 use log::{debug, warn};
 use reqwest::header::HeaderMap;
 use serde_json;
-use std::{collections::HashMap, thread};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 static ANALYTICS_TIMER_IN_MILLI: u64 = 10 * 1000;
 
 #[derive(Clone, Debug)]
@@ -14,14 +15,14 @@ pub struct AnalyticsProcessor {
 }
 
 impl AnalyticsProcessor {
-    pub fn new(
+    pub async fn new(
         api_url: String,
         headers: HeaderMap,
         timeout: std::time::Duration,
         timer: Option<u64>,
     ) -> Self {
         let (tx, rx) = flume::unbounded();
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .default_headers(headers)
             .timeout(timeout)
             .build()
@@ -33,35 +34,61 @@ impl AnalyticsProcessor {
             Arc::new(RwLock::new(HashMap::new()));
 
         let analytics_data_locked = Arc::clone(&analytics_data_arc);
-        thread::Builder::new()
-            .name("Analytics Processor".to_string())
-            .spawn(move || {
-                let mut last_flushed = chrono::Utc::now();
-                loop {
-                    let data = rx.try_recv();
-                    let mut analytics_data = analytics_data_locked.write().unwrap();
-                    match data {
-                        // Update the analytics data with feature_id received
-                        Ok(feature_name) => {
-                            analytics_data
-                                .entry(feature_name)
-                                .and_modify(|e| *e += 1)
-                                .or_insert(1);
-                        }
-                        Err(flume::TryRecvError::Empty) => {}
-                        Err(flume::TryRecvError::Disconnected) => {
-                            debug!("Shutting down analytics thread ");
-                            break;
-                        }
-                    };
-                    if (chrono::Utc::now() - last_flushed).num_milliseconds() > timer as i64 {
-                        flush(&client, &analytics_data, &analytics_endpoint);
-                        analytics_data.clear();
-                        last_flushed = chrono::Utc::now();
+        tokio::spawn(async move {
+            let mut last_flushed = chrono::Utc::now();
+            loop {
+                let data = rx.try_recv();
+                let mut analytics_data = analytics_data_locked.write().await;
+                match data {
+                    // Update the analytics data with feature_id received
+                    Ok(feature_name) => {
+                        analytics_data
+                            .entry(feature_name)
+                            .and_modify(|e| *e += 1)
+                            .or_insert(1);
                     }
+                    Err(flume::TryRecvError::Empty) => {}
+                    Err(flume::TryRecvError::Disconnected) => {
+                        debug!("Shutting down analytics thread ");
+                        break;
+                    }
+                };
+                if (chrono::Utc::now() - last_flushed).num_milliseconds() > timer as i64 {
+                    flush(&client, &analytics_data, &analytics_endpoint).await;
+                    analytics_data.clear();
+                    last_flushed = chrono::Utc::now();
                 }
-            })
-            .expect("Failed to start analytics thread");
+            }
+        });
+        // thread::Builder::new()
+        //     .name("Analytics Processor".to_string())
+        //     .spawn(move || {
+        //         let mut last_flushed = chrono::Utc::now();
+        //         loop {
+        //             let data = rx.try_recv();
+        //             let mut analytics_data = analytics_data_locked.write().unwrap();
+        //             match data {
+        //                 // Update the analytics data with feature_id received
+        //                 Ok(feature_name) => {
+        //                     analytics_data
+        //                         .entry(feature_name)
+        //                         .and_modify(|e| *e += 1)
+        //                         .or_insert(1);
+        //                 }
+        //                 Err(flume::TryRecvError::Empty) => {}
+        //                 Err(flume::TryRecvError::Disconnected) => {
+        //                     debug!("Shutting down analytics thread ");
+        //                     break;
+        //                 }
+        //             };
+        //             if (chrono::Utc::now() - last_flushed).num_milliseconds() > timer as i64 {
+        //                 flush(&client, &analytics_data, &analytics_endpoint).await;
+        //                 analytics_data.clear();
+        //                 last_flushed = chrono::Utc::now();
+        //             }
+        //         }
+        //     })
+        //     .expect("Failed to start analytics thread");
 
         return AnalyticsProcessor {
             tx,
@@ -73,8 +100,8 @@ impl AnalyticsProcessor {
     }
 }
 
-fn flush(
-    client: &reqwest::blocking::Client,
+async fn flush(
+    client: &reqwest::Client,
     analytics_data: &HashMap<String, u32>,
     analytics_endpoint: &str,
 ) {
@@ -82,7 +109,7 @@ fn flush(
         return;
     }
     let body = serde_json::to_string(&analytics_data).unwrap();
-    let resp = client.post(analytics_endpoint).body(body).send();
+    let resp = client.post(analytics_endpoint).body(body).send().await;
     if resp.is_err() {
         warn!("Failed to send analytics data");
     }
@@ -93,9 +120,10 @@ mod tests {
     use super::*;
     use httpmock::prelude::*;
     use reqwest::header;
+    use tokio::time::sleep;
 
-    #[test]
-    fn track_feature_updates_analytics_data() {
+    #[tokio::test]
+    async fn track_feature_updates_analytics_data() {
         // Given
         let feature_1 = "feature_1";
         let processor = AnalyticsProcessor::new(
@@ -103,19 +131,20 @@ mod tests {
             header::HeaderMap::new(),
             std::time::Duration::from_secs(10),
             Some(10000),
-        );
+        )
+        .await;
         // Now, let's make tracking calls
         processor.track_feature(feature_1);
         processor.track_feature(feature_1);
         // Wait a little for it to receive the message
-        thread::sleep(std::time::Duration::from_millis(50));
-        let analytics_data = processor._analytics_data.read().unwrap();
+        sleep(std::time::Duration::from_millis(50)).await;
+        let analytics_data = processor._analytics_data.read().await;
         // Then, verify that analytics_data was updated correctly
         assert_eq!(analytics_data[feature_1], 2);
     }
 
-    #[test]
-    fn test_analytics_processor() {
+    #[tokio::test]
+    async fn test_analytics_processor() {
         // Given
         let feature_1 = "feature_1";
         let feature_2 = "feature_2";
@@ -139,20 +168,21 @@ mod tests {
             headers,
             std::time::Duration::from_secs(10),
             Some(10),
-        );
+        )
+        .await;
         // Now, let's update the analytics data
-        let mut analytics_data = processor._analytics_data.write().unwrap();
+        let mut analytics_data = processor._analytics_data.write().await;
         analytics_data.insert(feature_1.to_string(), 10);
         analytics_data.insert(feature_2.to_string(), 10);
         // drop the analytics data to release the lock
         drop(analytics_data);
         // Next, let's sleep a little to let the processor flush the data
-        thread::sleep(std::time::Duration::from_millis(50));
+        sleep(std::time::Duration::from_millis(50)).await;
 
         // Finally, let's assert that the mock was called
         first_invocation_mock.assert();
         // and, analytics data is now empty
-        let analytics_data = processor._analytics_data.read().unwrap();
+        let analytics_data = processor._analytics_data.read().await;
         assert_eq!(true, analytics_data.is_empty())
     }
 }

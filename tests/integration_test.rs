@@ -18,8 +18,9 @@ use fixtures::mock_server;
 use fixtures::ENVIRONMENT_KEY;
 
 #[rstest]
+#[tokio::test]
 #[should_panic(expected = "default_flag_handler cannot be used with offline_handler")]
-fn test_flagsmith_panics_if_both_default_handler_and_offline_hanlder_are_set(
+async fn test_flagsmith_panics_if_both_default_handler_and_offline_hanlder_are_set(
     default_flag_handler: fn(&str) -> flagsmith::Flag,
 ) {
     let handler =
@@ -29,22 +30,24 @@ fn test_flagsmith_panics_if_both_default_handler_and_offline_hanlder_are_set(
         offline_handler: Some(Box::new(handler)),
         ..Default::default()
     };
-    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 }
 
 #[rstest]
+#[tokio::test]
 #[should_panic(expected = "offline_handler must be set to use offline_mode")]
-fn test_flagsmith_panics_if_offline_mode_is_used_without_offline_hanlder() {
+async fn test_flagsmith_panics_if_offline_mode_is_used_without_offline_hanlder() {
     let flagsmith_options = FlagsmithOptions {
         offline_mode: true,
         ..Default::default()
     };
-    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 }
 
 #[rstest]
+#[tokio::test]
 #[should_panic(expected = "offline_handler cannot be used with local evaluation")]
-fn test_flagsmith_should_panic_if_local_evaluation_mode_is_used_with_offline_handler() {
+async fn test_flagsmith_should_panic_if_local_evaluation_mode_is_used_with_offline_handler() {
     let handler =
         offline_handler::LocalFileHandler::new("tests/fixtures/environment.json").unwrap();
     let flagsmith_options = FlagsmithOptions {
@@ -52,10 +55,12 @@ fn test_flagsmith_should_panic_if_local_evaluation_mode_is_used_with_offline_han
         offline_handler: Some(Box::new(handler)),
         ..Default::default()
     };
-    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 }
+
 #[rstest]
-fn test_get_environment_flags_uses_local_environment_when_available(
+#[tokio::test]
+async fn test_get_environment_flags_uses_local_environment_when_available(
     mock_server: MockServer,
     environment_json: serde_json::Value,
 ) {
@@ -71,14 +76,14 @@ fn test_get_environment_flags_uses_local_environment_when_available(
         api_url: url,
         ..Default::default()
     };
-    let mut flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let mut flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
 
-    flagsmith.update_environment().unwrap();
+    flagsmith.update_environment().await.unwrap();
 
     // Then
-    let all_flags = flagsmith.get_environment_flags().unwrap().all_flags();
+    let all_flags = flagsmith.get_environment_flags().await.unwrap().all_flags();
     assert_eq!(all_flags.len(), 1);
     assert_eq!(all_flags[0].feature_name, fixtures::FEATURE_1_NAME);
     assert_eq!(all_flags[0].feature_id, fixtures::FEATURE_1_ID);
@@ -90,7 +95,8 @@ fn test_get_environment_flags_uses_local_environment_when_available(
 }
 
 #[rstest]
-fn test_get_environment_flags_calls_api_when_no_local_environment(
+#[tokio::test]
+async fn test_get_environment_flags_calls_api_when_no_local_environment(
     mock_server: MockServer,
     flags_json: serde_json::Value,
 ) {
@@ -106,10 +112,10 @@ fn test_get_environment_flags_calls_api_when_no_local_environment(
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let all_flags = flagsmith.get_environment_flags().unwrap().all_flags();
+    let all_flags = flagsmith.get_environment_flags().await.unwrap().all_flags();
 
     // Then
     assert_eq!(all_flags.len(), 1);
@@ -123,7 +129,8 @@ fn test_get_environment_flags_calls_api_when_no_local_environment(
 }
 
 #[rstest]
-fn test_offline_mode() {
+#[tokio::test]
+async fn test_offline_mode() {
     // Given
     let handler =
         offline_handler::LocalFileHandler::new("tests/fixtures/environment.json").unwrap();
@@ -132,12 +139,13 @@ fn test_offline_mode() {
         ..Default::default()
     };
 
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let env_flags = flagsmith.get_environment_flags().unwrap().all_flags();
+    let env_flags = flagsmith.get_environment_flags().await.unwrap().all_flags();
     let identity_flags = flagsmith
         .get_identity_flags("test_identity", None, None)
+        .await
         .unwrap()
         .all_flags();
 
@@ -161,7 +169,8 @@ fn test_offline_mode() {
 }
 
 #[rstest]
-fn test_offline_handler_is_used_if_request_fails(mock_server: MockServer) {
+#[tokio::test]
+async fn test_offline_handler_is_used_if_request_fails(mock_server: MockServer) {
     let url = mock_server.url("/api/v1/");
     let handler =
         offline_handler::LocalFileHandler::new("tests/fixtures/environment.json").unwrap();
@@ -171,12 +180,13 @@ fn test_offline_handler_is_used_if_request_fails(mock_server: MockServer) {
         ..Default::default()
     };
 
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let env_flags = flagsmith.get_environment_flags().unwrap().all_flags();
+    let env_flags = flagsmith.get_environment_flags().await.unwrap().all_flags();
     let identity_flags = flagsmith
         .get_identity_flags("test_identity", None, None)
+        .await
         .unwrap()
         .all_flags();
 
@@ -200,7 +210,8 @@ fn test_offline_handler_is_used_if_request_fails(mock_server: MockServer) {
 }
 
 #[rstest]
-fn test_get_identity_flags_uses_local_environment_when_available(
+#[tokio::test]
+async fn test_get_identity_flags_uses_local_environment_when_available(
     mock_server: MockServer,
     environment_json: serde_json::Value,
 ) {
@@ -216,15 +227,16 @@ fn test_get_identity_flags_uses_local_environment_when_available(
         api_url: url,
         ..Default::default()
     };
-    let mut flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let mut flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
 
-    flagsmith.update_environment().unwrap();
+    flagsmith.update_environment().await.unwrap();
 
     // Then
     let all_flags = flagsmith
         .get_identity_flags("test_identity", None, None)
+        .await
         .unwrap()
         .all_flags();
     assert_eq!(all_flags.len(), 1);
@@ -238,7 +250,8 @@ fn test_get_identity_flags_uses_local_environment_when_available(
 }
 
 #[rstest]
-fn test_get_identity_flags_calls_api_when_no_local_environment_no_traits(
+#[tokio::test]
+async fn test_get_identity_flags_calls_api_when_no_local_environment_no_traits(
     mock_server: MockServer,
     identities_json: serde_json::Value,
 ) {
@@ -260,12 +273,13 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_no_traits(
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
 
     let all_flags = flagsmith
         .get_identity_flags(identifier, None, None)
+        .await
         .unwrap()
         .all_flags();
 
@@ -282,7 +296,8 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_no_traits(
 }
 
 #[rstest]
-fn test_get_identity_flags_calls_api_when_no_local_environment_with_traits(
+#[tokio::test]
+async fn test_get_identity_flags_calls_api_when_no_local_environment_with_traits(
     mock_server: MockServer,
     identities_json: serde_json::Value,
 ) {
@@ -308,7 +323,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_traits(
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let traits = vec![SDKTrait::new(
@@ -320,6 +335,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_traits(
     )];
     let all_flags = flagsmith
         .get_identity_flags(identifier, Some(traits), None)
+        .await
         .unwrap()
         .all_flags();
 
@@ -336,7 +352,8 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_traits(
 }
 
 #[rstest]
-fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_traits(
+#[tokio::test]
+async fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_traits(
     mock_server: MockServer,
     identities_json: serde_json::Value,
 ) {
@@ -366,7 +383,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_tr
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let traits = vec![
@@ -388,6 +405,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_tr
     ];
     flagsmith
         .get_identity_flags(identifier, Some(traits), None)
+        .await
         .unwrap()
         .all_flags();
 
@@ -396,7 +414,8 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_tr
 }
 
 #[rstest]
-fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_identity(
+#[tokio::test]
+async fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_identity(
     mock_server: MockServer,
     identities_json: serde_json::Value,
 ) {
@@ -422,7 +441,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_id
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let traits = vec![SDKTrait::new(
@@ -434,6 +453,7 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_id
     )];
     flagsmith
         .get_identity_flags(identifier, Some(traits), Some(true))
+        .await
         .unwrap()
         .all_flags();
 
@@ -441,9 +461,9 @@ fn test_get_identity_flags_calls_api_when_no_local_environment_with_transient_id
     api_mock.assert();
 }
 
-
 #[rstest]
-fn test_default_flag_is_not_used_when_environment_flags_returned(
+#[tokio::test]
+async fn test_default_flag_is_not_used_when_environment_flags_returned(
     mock_server: MockServer,
     flags_json: serde_json::Value,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
@@ -460,10 +480,10 @@ fn test_default_flag_is_not_used_when_environment_flags_returned(
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let flags = flagsmith.get_environment_flags().unwrap();
+    let flags = flagsmith.get_environment_flags().await.unwrap();
     let flag = flags.get_flag(fixtures::FEATURE_1_NAME).unwrap();
     // Then
     assert_eq!(flag.feature_name, fixtures::FEATURE_1_NAME);
@@ -478,7 +498,8 @@ fn test_default_flag_is_not_used_when_environment_flags_returned(
 }
 
 #[rstest]
-fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
+#[tokio::test]
+async fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
     mock_server: MockServer,
     flags_json: serde_json::Value,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
@@ -495,10 +516,10 @@ fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let flags = flagsmith.get_environment_flags().unwrap();
+    let flags = flagsmith.get_environment_flags().await.unwrap();
     let flag = flags.get_flag("feature_that_does_not_exists").unwrap();
     // Then
     assert_eq!(flag.is_default, true);
@@ -511,7 +532,8 @@ fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
 }
 
 #[rstest]
-fn test_default_flag_is_not_used_when_identity_flags_returned(
+#[tokio::test]
+async fn test_default_flag_is_not_used_when_identity_flags_returned(
     mock_server: MockServer,
     identities_json: serde_json::Value,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
@@ -535,11 +557,12 @@ fn test_default_flag_is_not_used_when_identity_flags_returned(
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let flags = flagsmith
         .get_identity_flags(identifier, None, None)
+        .await
         .unwrap();
     let flag = flags.get_flag(fixtures::FEATURE_1_NAME).unwrap();
     // Then
@@ -555,7 +578,8 @@ fn test_default_flag_is_not_used_when_identity_flags_returned(
 }
 
 #[rstest]
-fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
+#[tokio::test]
+async fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
     mock_server: MockServer,
     identities_json: serde_json::Value,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
@@ -579,11 +603,12 @@ fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let flags = flagsmith
         .get_identity_flags(identifier, None, None)
+        .await
         .unwrap();
     let flag = flags.get_flag("feature_that_does_not_exists").unwrap();
     // Then
@@ -597,7 +622,8 @@ fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
 }
 
 #[rstest]
-fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_environment(
+#[tokio::test]
+async fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_environment(
     mock_server: MockServer,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
 ) {
@@ -614,10 +640,10 @@ fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_e
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let flags = flagsmith.get_environment_flags().unwrap();
+    let flags = flagsmith.get_environment_flags().await.unwrap();
     let flag = flags.get_flag(fixtures::FEATURE_1_NAME).unwrap();
     // Then
     assert_eq!(flag.is_default, true);
@@ -630,7 +656,8 @@ fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_e
 }
 
 #[rstest]
-fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_identity(
+#[tokio::test]
+async fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_identity(
     mock_server: MockServer,
     default_flag_handler: fn(&str) -> flagsmith::Flag,
 ) {
@@ -653,11 +680,12 @@ fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_i
         default_flag_handler: Some(default_flag_handler),
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
     let flags = flagsmith
         .get_identity_flags(identifier, None, None)
+        .await
         .unwrap();
     let flag = flags.get_flag("feature_that_does_not_exists").unwrap();
     // Then
@@ -671,7 +699,8 @@ fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_i
 }
 
 #[rstest]
-fn test_flagsmith_api_error_is_returned_if_something_goes_wrong_with_the_request(
+#[tokio::test]
+async fn test_flagsmith_api_error_is_returned_if_something_goes_wrong_with_the_request(
     mock_server: MockServer,
 ) {
     // Give
@@ -686,15 +715,16 @@ fn test_flagsmith_api_error_is_returned_if_something_goes_wrong_with_the_request
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
 
     // When
-    let err = flagsmith.get_environment_flags().err().unwrap();
+    let err = flagsmith.get_environment_flags().await.err().unwrap();
     assert_eq!(err.kind, flagsmith::error::ErrorKind::FlagsmithAPIError);
 }
 
 #[rstest]
-fn test_flagsmith_client_error_is_returned_if_get_flag_is_called_with_a_flag_that_does_not_exists_without_default_handler(
+#[tokio::test]
+async fn test_flagsmith_client_error_is_returned_if_get_flag_is_called_with_a_flag_that_does_not_exists_without_default_handler(
     mock_server: MockServer,
     flags_json: serde_json::Value,
 ) {
@@ -710,10 +740,11 @@ fn test_flagsmith_client_error_is_returned_if_get_flag_is_called_with_a_flag_tha
         api_url: url,
         ..Default::default()
     };
-    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options);
+    let flagsmith = Flagsmith::new(ENVIRONMENT_KEY.to_string(), flagsmith_options).await;
     // When
     let err = flagsmith
         .get_environment_flags()
+        .await
         .unwrap()
         .get_flag("flag_that_does_not_exists")
         .err()
@@ -724,13 +755,16 @@ fn test_flagsmith_client_error_is_returned_if_get_flag_is_called_with_a_flag_tha
 }
 
 #[rstest]
-fn test_get_identity_segments_no_traits(local_eval_flagsmith: Flagsmith) {
+#[tokio::test]
+async fn test_get_identity_segments_no_traits(#[future] local_eval_flagsmith: Flagsmith) {
     // Given
     let identifier = "some_identifier";
 
     // When
     let segments = local_eval_flagsmith
+        .await
         .get_identity_segments(identifier, None)
+        .await
         .unwrap();
 
     //Then
@@ -738,7 +772,8 @@ fn test_get_identity_segments_no_traits(local_eval_flagsmith: Flagsmith) {
 }
 
 #[rstest]
-fn test_get_identity_segments_with_valid_trait(local_eval_flagsmith: Flagsmith) {
+#[tokio::test]
+async fn test_get_identity_segments_with_valid_trait(#[future] local_eval_flagsmith: Flagsmith) {
     // Given
     let identifier = "some_identifier";
 
@@ -755,7 +790,9 @@ fn test_get_identity_segments_with_valid_trait(local_eval_flagsmith: Flagsmith) 
     }];
     // When
     let segments = local_eval_flagsmith
+        .await
         .get_identity_segments(identifier, Some(traits))
+        .await
         .unwrap();
 
     //Then
