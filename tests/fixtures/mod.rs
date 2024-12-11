@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use httpmock::prelude::*;
 use rstest::*;
 use serde_json;
 
-use flagsmith::{Flagsmith, FlagsmithOptions};
+use flagsmith::{
+    flagsmith::default_handler::{self, DefaultHandler},
+    Flagsmith, FlagsmithOptions,
+};
 pub static FEATURE_1_NAME: &str = "feature_1";
 pub static FEATURE_1_ID: u32 = 1;
 pub static FEATURE_1_STR_VALUE: &str = "some_value";
@@ -133,9 +138,10 @@ pub fn identities_json() -> serde_json::Value {
         )
 }
 
-#[fixture]
-pub fn default_flag_handler() -> fn(&str) -> flagsmith::Flag {
-    fn handler(_feature_name: &str) -> flagsmith::Flag {
+struct FeatureDefault {}
+
+impl DefaultHandler for FeatureDefault {
+    fn get_default(&self, _feature_name: &str) -> flagsmith::Flag {
         let mut default_flag = flagsmith::Flag::default();
         default_flag.enabled = true;
         default_flag.is_default = true;
@@ -143,7 +149,11 @@ pub fn default_flag_handler() -> fn(&str) -> flagsmith::Flag {
         default_flag.value.value = DEFAULT_FLAG_HANDLER_FLAG_VALUE.to_string();
         return default_flag;
     }
-    return handler;
+}
+
+#[fixture]
+pub fn default_flag_handler() -> Arc<dyn default_handler::DefaultHandler + Send + Sync> {
+    Arc::new(FeatureDefault {})
 }
 
 #[fixture]

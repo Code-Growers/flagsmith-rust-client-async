@@ -1,5 +1,5 @@
 use self::analytics::AnalyticsProcessor;
-use self::models::{Flag, Flags};
+use self::models::Flags;
 use super::error;
 use flagsmith_flag_engine::engine;
 use flagsmith_flag_engine::environments::builders::build_environment_struct;
@@ -12,15 +12,15 @@ use models::SDKTrait;
 use reqwest::header::{self, HeaderMap};
 use serde_json::json;
 use std::collections::HashMap;
-use tokio::sync::mpsc::error::TryRecvError;
-use tokio::sync::mpsc::Sender;
-// use std::sync::mpsc::{self, SyncSender, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc::error::TryRecvError;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Mutex};
 
 mod analytics;
 
+pub mod default_handler;
 pub mod models;
 pub mod offline_handler;
 
@@ -33,7 +33,7 @@ pub struct FlagsmithOptions {
     pub enable_local_evaluation: bool,
     pub environment_refresh_interval_mills: u64,
     pub enable_analytics: bool,
-    pub default_flag_handler: Option<fn(&str) -> Flag>,
+    pub default_flag_handler: Option<Arc<dyn default_handler::DefaultHandler + Send + Sync>>,
     pub offline_handler: Option<Box<dyn offline_handler::OfflineHandler + Send + Sync>>,
     pub offline_mode: bool,
 }
@@ -279,7 +279,7 @@ impl Flagsmith {
                     return Ok(Flags::from_api_flags(
                         &vec![],
                         self.analytics_processor.clone(),
-                        self.options.default_flag_handler,
+                        self.options.default_flag_handler.clone(),
                     )
                     .unwrap());
                 } else {
@@ -292,7 +292,7 @@ impl Flagsmith {
         return models::Flags::from_feature_states(
             &environment.feature_states,
             self.analytics_processor.clone(),
-            self.options.default_flag_handler,
+            self.options.default_flag_handler.clone(),
             None,
         );
     }
@@ -318,7 +318,7 @@ impl Flagsmith {
         let flags = Flags::from_feature_states(
             &feature_states,
             self.analytics_processor.clone(),
-            self.options.default_flag_handler,
+            self.options.default_flag_handler.clone(),
             Some(&identity.composite_key()),
         );
         return Ok(flags);
@@ -370,7 +370,7 @@ impl Flagsmith {
         let flags = Flags::from_api_flags(
             api_flags,
             self.analytics_processor.clone(),
-            self.options.default_flag_handler,
+            self.options.default_flag_handler.clone(),
         )
         .ok_or(error::Error::new(
             error::ErrorKind::FlagsmithAPIError,
@@ -396,7 +396,7 @@ impl Flagsmith {
         let flags = Flags::from_api_flags(
             api_flags,
             self.analytics_processor.clone(),
-            self.options.default_flag_handler,
+            self.options.default_flag_handler.clone(),
         )
         .ok_or(error::Error::new(
             error::ErrorKind::FlagsmithAPIError,

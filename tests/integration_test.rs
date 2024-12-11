@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use flagsmith::flagsmith::models::SDKTrait;
-use flagsmith::flagsmith::offline_handler;
+use flagsmith::flagsmith::{default_handler, offline_handler};
 use flagsmith::{Flagsmith, FlagsmithOptions};
 use flagsmith_flag_engine::identities::Trait;
 use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
@@ -21,7 +23,7 @@ use fixtures::ENVIRONMENT_KEY;
 #[tokio::test]
 #[should_panic(expected = "default_flag_handler cannot be used with offline_handler")]
 async fn test_flagsmith_panics_if_both_default_handler_and_offline_hanlder_are_set(
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     let handler =
         offline_handler::LocalFileHandler::new("tests/fixtures/environment.json").unwrap();
@@ -466,7 +468,7 @@ async fn test_get_identity_flags_calls_api_when_no_local_environment_with_transi
 async fn test_default_flag_is_not_used_when_environment_flags_returned(
     mock_server: MockServer,
     flags_json: serde_json::Value,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     let api_mock = mock_server.mock(|when, then| {
         when.method(GET)
@@ -502,7 +504,7 @@ async fn test_default_flag_is_not_used_when_environment_flags_returned(
 async fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
     mock_server: MockServer,
     flags_json: serde_json::Value,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     let api_mock = mock_server.mock(|when, then| {
         when.method(GET)
@@ -536,7 +538,7 @@ async fn test_default_flag_is_used_when_no_matching_environment_flag_returned(
 async fn test_default_flag_is_not_used_when_identity_flags_returned(
     mock_server: MockServer,
     identities_json: serde_json::Value,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     // Given
     let identifier = "test_identity";
@@ -582,7 +584,7 @@ async fn test_default_flag_is_not_used_when_identity_flags_returned(
 async fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
     mock_server: MockServer,
     identities_json: serde_json::Value,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     // Given
     let identifier = "test_identity";
@@ -625,7 +627,7 @@ async fn test_default_flag_is_used_when_no_matching_identity_flags_returned(
 #[tokio::test]
 async fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_environment(
     mock_server: MockServer,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     // Give
     let api_mock = mock_server.mock(|when, then| {
@@ -659,7 +661,7 @@ async fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given
 #[tokio::test]
 async fn test_default_flags_are_used_if_api_error_and_default_flag_handler_given_for_identity(
     mock_server: MockServer,
-    default_flag_handler: fn(&str) -> flagsmith::Flag,
+    default_flag_handler: Arc<dyn default_handler::DefaultHandler + Send + Sync>,
 ) {
     // Given
     let identifier = "test_identity";

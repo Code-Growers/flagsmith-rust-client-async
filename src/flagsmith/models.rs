@@ -5,8 +5,11 @@ use flagsmith_flag_engine::identities::Trait;
 use flagsmith_flag_engine::types::{FlagsmithValue, FlagsmithValueType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::error;
+
+use super::default_handler;
 
 #[derive(Clone, Debug, Default)]
 pub struct Flag {
@@ -75,14 +78,14 @@ impl Flag {
 pub struct Flags {
     flags: HashMap<String, Flag>,
     analytics_processor: Option<AnalyticsProcessor>,
-    default_flag_handler: Option<fn(&str) -> Flag>,
+    default_flag_handler: Option<Arc<dyn default_handler::DefaultHandler + Send + Sync>>,
 }
 
 impl Flags {
     pub fn from_feature_states(
         feature_states: &Vec<FeatureState>,
         analytics_processor: Option<AnalyticsProcessor>,
-        default_flag_handler: Option<fn(&str) -> Flag>,
+        default_flag_handler: Option<Arc<dyn default_handler::DefaultHandler + Send + Sync>>,
         identity_id: Option<&str>,
     ) -> Flags {
         let mut flags: HashMap<String, Flag> = HashMap::new();
@@ -101,7 +104,7 @@ impl Flags {
     pub fn from_api_flags(
         api_flags: &Vec<serde_json::Value>,
         analytics_processor: Option<AnalyticsProcessor>,
-        default_flag_handler: Option<fn(&str) -> Flag>,
+        default_flag_handler: Option<Arc<dyn default_handler::DefaultHandler + Send + Sync>>,
     ) -> Option<Flags> {
         let mut flags: HashMap<String, Flag> = HashMap::new();
         for flag_json in api_flags {
@@ -147,8 +150,8 @@ impl Flags {
                 };
                 return Ok(flag.clone());
             }
-            None => match self.default_flag_handler {
-                Some(handler) => Ok(handler(feature_name)),
+            None => match &self.default_flag_handler {
+                Some(handler) => Ok(handler.get_default(feature_name)),
                 None => Err(error::Error::new(
                     error::ErrorKind::FlagsmithAPIError,
                     "API returned invalid response".to_string(),
