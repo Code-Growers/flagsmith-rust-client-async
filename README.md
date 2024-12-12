@@ -4,7 +4,12 @@
 
 ![Flagsmith Screenshot](https://github.com/Flagsmith/flagsmith/raw/main/static-files/hero.png)
 
-# Flagsmith Rust SDK
+# Disclaimer
+This is a async version of the official Flagsmith Rust SDK (based on Tokio runtime) + minor tweak in type of `default_flag_handler` to allow context. It was created because crate [flagsmith-async]([flagsmith-async](https://crates.io/crates/flagsmith-async)) has not been updated over 2 years.
+
+It follows the same logic as original SDK, just some methods are now async instead of blocking.
+
+# Flagsmith Rust SDK Async
 
 > Flagsmith allows you to manage feature flags and remote config across multiple projects, environments and organisations.
 
