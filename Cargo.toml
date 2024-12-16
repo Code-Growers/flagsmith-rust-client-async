@@ -11,13 +11,15 @@ readme = "README.md"
 categories = ["config", "api-bindings"]
 keywords = ["Flagsmith", "feature-flag", "remote-config"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["reqwest/default-tls"]
+rustls = ["reqwest/rustls"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
 url = "2.1"
 chrono = { version = "0.4" }
 log = "0.4"
